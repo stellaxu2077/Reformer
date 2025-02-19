@@ -20,6 +20,17 @@ def load_model(tokenizer, model_path):
         model.cuda()
     model.eval()
     return model
+
+from train_reformer_bc import Bert4BinaryClassification  #
+def load_model_bc(tokenizer, model_path):
+    model = Bert4BinaryClassification(tokenizer)
+    state_dict = torch.load(model_path, map_location="cpu")
+    model.load_state_dict(state_dict, strict=False)
+    
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model.to(device)
+    model.eval()
+    return model, device
     
 def snp_2_seq(snp, strand, fasta):
     chromosome =  snp.split(":")[0]

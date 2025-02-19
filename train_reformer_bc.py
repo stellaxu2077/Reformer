@@ -86,6 +86,7 @@ parser.add_argument('--h5file', help='input h5file')
 parser.add_argument('--device', nargs='+', help='a list of gpu')
 parser.add_argument('--resume', help='resume from checkpoint')
 
+'''
 class SequenceDataset(torch.utils.data.Dataset):
     def __init__(self, h5file, tokenizer, max_length=512, train=False):
         df = h5py.File(h5file)
@@ -115,6 +116,47 @@ class SequenceDataset(torch.utils.data.Dataset):
         inputs = self.tokenizer(seq, is_split_into_words=True, add_special_tokens=True, return_tensors='pt') 
         label = torch.tensor(label)
         return inputs['input_ids'], label
+'''
+class SequenceDataset(torch.utils.data.Dataset):
+    def __init__(self, h5file, tokenizer, max_length=512, mode="train"):
+        df = h5py.File(h5file)
+        self.tokenizer = tokenizer
+        self.max_length = max_length
+        
+        if mode == "train":
+            self.sequence = df['trn_seq']      
+            self.label = df['trn_label']
+            self.barcode = df['trn_code_prefix']
+        elif mode == "val":
+            self.sequence = df['val_seq']    
+            self.label = df['val_label']
+            self.barcode = df['val_code_prefix']
+        elif mode == "test":
+            self.sequence = df['test_seq']  # Ensure 'test_seq' exists in HDF5 file
+            self.barcode = df['test_code_prefix']
+            self.label = None
+        else:
+            raise ValueError("Invalid mode! Choose from ['train', 'val', 'test'].")
+
+        self.n = len(self.sequence)
+    
+    def __len__(self):
+        return self.n
+
+    def __getitem__(self, i):
+        ss = self.sequence[i].decode()
+        #label = int(self.label[i])
+        ss = [ss[i:int(i+3)] for i in range(int(len(ss)-2))]# 3 mer data
+        seq = [self.barcode[i].decode()]
+        seq.extend(ss[:-1])
+        inputs = self.tokenizer(seq, is_split_into_words=True, add_special_tokens=True, return_tensors='pt') 
+        
+        if self.label is not None:
+            label = int(self.label[i])
+            label = torch.tensor(label)
+            return inputs['input_ids'], label
+        else:
+            return inputs['input_ids']  # No label in test mode
 
 class Bert4BinaryClassification(nn.Module):
     def __init__(self,tokenizer):
@@ -191,6 +233,8 @@ def main_worker(gpus, args):
     criterion = nn.BCELoss()
 
     cudnn.benchmark = True
+    #train_dataset = SequenceDataset(args.h5file, tokenizer, train=True)
+    #val_dataset = SequenceDataset(args.h5file, tokenizer, train=False)
     train_dataset = SequenceDataset(args.h5file, tokenizer, train=True)
     val_dataset = SequenceDataset(args.h5file, tokenizer, train=False)
 
